@@ -1,0 +1,94 @@
+name: Build personal Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+      CAP_DISABLE_UPDATER: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Configure Rust cache
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          target: x86_64-pc-windows-msvc
+          save-cache: "true"
+
+      - name: Configure Node and pnpm
+        uses: ./.github/actions/setup-js
+
+      - name: Configure production environment
+        shell: bash
+        run: |
+          {
+            echo "VITE_ENVIRONMENT=production"
+            echo "NEXT_PUBLIC_WEB_URL=https://cap.so"
+            echo "NEXTAUTH_URL=https://cap.so"
+            echo "VITE_SERVER_URL=https://cap.so"
+            echo "RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc"
+          } > .env
+
+      - name: Prepare native dependencies
+        shell: bash
+        run: pnpm -w cap-setup
+
+      - name: Build desktop sidecars
+        shell: bash
+        run: ./scripts/build-desktop-binaries.sh x86_64-pc-windows-msvc
+
+      - name: Increase Windows pagefile
+        uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708
+        with:
+          minimum-size: 16GB
+          maximum-size: 24GB
+          disk-root: "D:"
+
+      - name: Build unsigned NSIS installer
+        working-directory: apps/desktop
+        run: pnpm build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.personal.conf.json --bundles nsis
+        env:
+          CI: false
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "No NSIS installer was produced"
+          }
+          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName
+          "$($hash.Hash) *$($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256"
+          Write-Host "Installer: $($installer.FullName)"
+          Write-Host "SHA256: $($hash.Hash)"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: cap-personal-windows-${{ github.sha }}
+          path: |
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sha256
+          if-no-files-found: error
+          retention-days: 14

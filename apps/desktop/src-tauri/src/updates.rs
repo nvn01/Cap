@@ -16,6 +16,10 @@ const FIRST_CHECK_DELAY: Duration = Duration::from_secs(60);
 const CHECK_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
 const BUSY_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
 
+fn updates_disabled() -> bool {
+    option_env!("CAP_DISABLE_UPDATER").is_some()
+}
+
 #[derive(Serialize, Deserialize, Type, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum UpdateChannel {
@@ -147,6 +151,10 @@ fn pick_higher_version(a: Option<Update>, b: Option<Update>) -> Option<Update> {
 }
 
 pub async fn check(app: &AppHandle) -> Result<Option<Update>, String> {
+    if updates_disabled() {
+        return Ok(None);
+    }
+
     let channel = current_channel(app);
 
     let stable = check_channel(app, UpdateChannel::Stable, channel == UpdateChannel::Stable).await;
@@ -272,8 +280,7 @@ pub fn updates_channel_changed(app: AppHandle) -> Result<(), String> {
 }
 
 pub fn spawn_background_loop(app: AppHandle) {
-    // Never auto-update dev builds.
-    if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) || updates_disabled() {
         return;
     }
 
