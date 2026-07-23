@@ -1,9 +1,9 @@
 use anyhow::Result;
 use cap_project::{
-    AspectRatio, Camera, CameraShape, CameraXPosition, CameraYPosition, ClipOffsets,
-    ClipTransitionType, CornerStyle, Crop, CursorEvents, CursorType, FrameConfiguration,
-    FrameStyle, ProjectConfiguration, RecordingMeta, SceneMode, StudioRecordingMeta,
-    TimelineFrameMapping, TimelineSource, XY,
+    AspectRatio, BorderConfiguration, Camera, CameraShape, CameraXPosition, CameraYPosition,
+    ClipOffsets, ClipTransitionType, CornerStyle, Crop, CursorEvents, CursorType,
+    FrameConfiguration, FrameStyle, ProjectConfiguration, RecordingMeta, SceneMode,
+    StudioRecordingMeta, TimelineFrameMapping, TimelineSource, XY,
 };
 use composite_frame::CompositeVideoFrameUniforms;
 use core::f64;
@@ -210,6 +210,12 @@ fn rounding_type_value(style: CornerStyle) -> f32 {
         CornerStyle::Rounded => 0.0,
         CornerStyle::Squircle => 1.0,
     }
+}
+
+fn border_width_for_pass(border: Option<&BorderConfiguration>, pass_uses_border: bool) -> f32 {
+    border
+        .filter(|border| border.enabled && pass_uses_border)
+        .map_or(0.0, |border| border.width)
 }
 
 #[derive(Debug, Clone, Copy, Type)]
@@ -3573,7 +3579,10 @@ impl ProjectUniforms {
                             .map_or(50.0, |s| s.blur),
                         opacity: scene.screen_opacity as f32 * split_fade,
                         border_enabled: if decorated && border_on { 1.0 } else { 0.0 },
-                        border_width: project.background.border.as_ref().map_or(5.0, |b| b.width),
+                        border_width: border_width_for_pass(
+                            project.background.border.as_ref(),
+                            decorated,
+                        ),
                         preserve_source_alpha: 1.0,
                         _padding1: [0.0; 3],
                         border_color,
@@ -3630,7 +3639,10 @@ impl ProjectUniforms {
                         .map_or(50.0, |s| s.blur),
                     opacity: scene.screen_opacity as f32,
                     border_enabled: if border_on && !frame_active { 1.0 } else { 0.0 },
-                    border_width: project.background.border.as_ref().map_or(5.0, |b| b.width),
+                    border_width: border_width_for_pass(
+                        project.background.border.as_ref(),
+                        !frame_active,
+                    ),
                     preserve_source_alpha: if options.preserve_screen_alpha {
                         1.0
                     } else {
@@ -4001,6 +4013,18 @@ mod tests {
             camera_size: None,
             preserve_screen_alpha: false,
         }
+    }
+
+    #[test]
+    fn border_width_is_zero_when_the_border_or_render_pass_is_disabled() {
+        let mut border = BorderConfiguration::default();
+
+        assert_eq!(border_width_for_pass(Some(&border), true), 0.0);
+
+        border.enabled = true;
+        assert_eq!(border_width_for_pass(Some(&border), false), 0.0);
+        assert_eq!(border_width_for_pass(Some(&border), true), border.width);
+        assert_eq!(border_width_for_pass(None, true), 0.0);
     }
 
     fn motion_bounds(start: XY<f64>, end: XY<f64>) -> MotionBounds {
