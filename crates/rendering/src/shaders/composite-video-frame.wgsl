@@ -238,6 +238,15 @@ fn fs_main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
 
+    if !blur_active && (
+        target_uv.x < 0.0 ||
+        target_uv.x > 1.0 ||
+        target_uv.y < 0.0 ||
+        target_uv.y > 1.0
+    ) {
+        return shadow_color;
+    }
+
     let shape_coverage = rounded_rect_coverage(
         p - center,
         size,
