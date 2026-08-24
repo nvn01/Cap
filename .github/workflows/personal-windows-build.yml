@@ -3,11 +3,11 @@ name: Build personal Windows installer
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    tags:
+      - "personal-cap-*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: personal-windows-${{ github.ref }}
@@ -92,3 +92,15 @@ jobs:
             target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/personal-cap-')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^personal-cap-', ''
+          $installer = Get-ChildItem "target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          $checksum = Get-Item "$($installer.FullName).sha256"
+          gh release create $tag $installer.FullName $checksum.FullName --repo "${{ github.repository }}" --title "Personal Cap $version" --notes "Personal Windows build of Cap $version with fixes for thin-line and rounded-corner rendering artifacts in Studio Mode." --latest
