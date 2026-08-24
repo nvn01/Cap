@@ -21,6 +21,7 @@ type FooterLink = {
 const footerLinks = {
 	product: [
 		{ label: "Blog", href: "/blog" },
+		{ label: "Changelog", href: "/changelog" },
 		{ label: "Docs", href: "/docs" },
 		{ label: "Pricing", href: "/pricing" },
 		{ label: "Download", href: "/download" },
@@ -130,9 +131,14 @@ const socialLinks: {
 	},
 ];
 
-const complianceBadges: { label: string; content: ReactNode }[] = [
+const complianceBadges: {
+	label: string;
+	status: "compliant" | "in progress";
+	content: ReactNode;
+}[] = [
 	{
 		label: "SOC 2",
+		status: "compliant",
 		content: (
 			<text
 				x="22"
@@ -149,6 +155,7 @@ const complianceBadges: { label: string; content: ReactNode }[] = [
 	},
 	{
 		label: "HIPAA",
+		status: "in progress",
 		content: (
 			<text
 				x="22"
@@ -165,6 +172,7 @@ const complianceBadges: { label: string; content: ReactNode }[] = [
 	},
 	{
 		label: "ISO 27001",
+		status: "compliant",
 		content: (
 			<>
 				<text
@@ -196,14 +204,14 @@ const complianceBadges: { label: string; content: ReactNode }[] = [
 const ComplianceBadges = () => (
 	<div>
 		<div className="flex flex-wrap gap-2.5 items-center text-gray-10">
-			{complianceBadges.map(({ label, content }) => (
+			{complianceBadges.map(({ label, status, content }) => (
 				<Link
 					key={label}
 					href="https://trust.cap.so"
 					target="_blank"
 					rel="noopener noreferrer"
-					title={`${label} — in progress`}
-					aria-label={`${label} compliance in progress. View Cap's Trust Portal`}
+					title={`${label} — ${status}`}
+					aria-label={`${label} ${status}. View Cap's Trust Portal`}
 					className="transition-colors text-gray-9 hover:text-gray-12"
 				>
 					<svg
@@ -225,7 +233,9 @@ const ComplianceBadges = () => (
 				</Link>
 			))}
 		</div>
-		<p className="mt-2 text-[11px] text-gray-9">Certifications in progress</p>
+		<p className="mt-2 text-[11px] text-gray-9">
+			SOC 2 Type II & ISO 27001 compliant · HIPAA in progress
+		</p>
 	</div>
 );
 

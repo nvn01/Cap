@@ -107,11 +107,20 @@ async function createLoomImportRateLimitCheck(userId: User.UserId) {
 	});
 
 	return async () => {
-		const { rateLimited } = await checkRateLimit(LOOM_IMPORT_RATE_LIMIT_ID, {
-			request,
-			rateLimitKey: `loom-import:${userId}`,
-		});
-		return rateLimited;
+		try {
+			const { rateLimited } = await checkRateLimit(LOOM_IMPORT_RATE_LIMIT_ID, {
+				request,
+				rateLimitKey: `loom-import:${userId}`,
+			});
+			return rateLimited;
+		} catch (error) {
+			// Fail open: a firewall/edge outage must never block Loom imports.
+			console.error(
+				`Rate limit check failed for "${LOOM_IMPORT_RATE_LIMIT_ID}":`,
+				error,
+			);
+			return false;
+		}
 	};
 }
 
@@ -317,10 +326,12 @@ async function importLoomVideoForOwner({
 	loomUrl,
 	orgId,
 	ownerId,
+	isRateLimited,
 }: {
 	loomUrl: string;
 	orgId: Organisation.OrganisationId;
 	ownerId: User.UserId;
+	isRateLimited?: () => Promise<boolean>;
 }): Promise<LoomImportResult> {
 	const loomVideoId = extractLoomVideoId(loomUrl.trim());
 	if (!loomVideoId) {
@@ -355,6 +366,13 @@ async function importLoomVideoForOwner({
 		return {
 			success: false,
 			error: "This Loom video has already been imported.",
+		};
+	}
+
+	if (isRateLimited && (await isRateLimited())) {
+		return {
+			success: false,
+			error: LOOM_IMPORT_RATE_LIMIT_ERROR,
 		};
 	}
 
@@ -791,22 +809,12 @@ export async function importFromLoomCsv({
 			}
 		}
 
-		if (await isRateLimited()) {
-			results.push({
-				rowNumber: row.rowNumber,
-				userEmail: row.userEmail,
-				spaceName: row.spaceName || undefined,
-				success: false,
-				error: LOOM_IMPORT_RATE_LIMIT_ERROR,
-			});
-			continue;
-		}
-
 		try {
 			const result = await importLoomVideoForOwner({
 				loomUrl: row.loomUrl,
 				orgId,
 				ownerId: member.userId,
+				isRateLimited,
 			});
 
 			let spaceName = row.spaceName || undefined;
